@@ -1,25 +1,26 @@
 # Site settings
 title:  Greagen's Blog
 SEOTitle: Greagen's Blog
-header-img: img/post-bg-desk.jpg
+header-img: img/head-pic.jpg
 email: donxiaoyao@gmail.com
 description: "to do."
 keyword: "to do"
 url: "http://greagen.github.io"          # your host, for absolute URL
 baseurl: ""      # for example, '/blog' if your blog hosted on 'host/blog'
 github_repo: "https://github.com/greagen/greagen.github.io.git" # you code repository
+# timezone: Asia/Shanghai
+
+
 
 # Sidebar settings
 sidebar: true                           # whether or not using Sidebar.
 sidebar-about-description: "to do!"
 sidebar-avatar: /img/about-me.jpeg      # use absolute URL, seeing it's used in both `/` and `/about/`
 
-
-
 # SNS settings
 RSS: false
 # weibo_username:     qiubaiying
-zhihu_username:     zhihu
+zhihu_username:     jun-yi-42-8
 github_username:    greagen
 # facebook_username:  face
 # jianshu_username:   jianshu
