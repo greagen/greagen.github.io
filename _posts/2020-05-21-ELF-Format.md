@@ -15,9 +15,17 @@ tags:
 
 # ELF Format
 
-##　一、概述
+## 一、概述
 
 　　ELF 文件是Linux以及Unix系统下的标准二进制文件格式。ELF 文件包含可执行文件、动态链接文件、目标文件、内核引导镜像文件等[<sup>1</sup>](#refer-anchor)。ELF文件一般采用的后缀有:none, .axf, .bin, .elf, .o, .prx, .puff, .ko, .mod and .so。magic number 为：0x7F 'E' 'L' 'F'。了解二进制文件结构是进行逆向工程、二进制文件分析等操作的基础和前提。
+
+​        工欲善其事必先利其器，几个分析ELF文件的工具：
+
+- `readelf` is a Unix binary utility that displays information about one or more ELF files. A free software implementation is provided by GNU Binutils.
+- `elfutils` provides alternative tools to GNU Binutils purely for Linux.
+- `elfdump` is a command for viewing ELF information in an ELF file, available under Solaris and FreeBSD.
+- `objdump` provides a wide range of information about ELF files and other object formats. `objdump` uses the [Binary File Descriptor library](https://en.wikipedia.org/wiki/Binary_File_Descriptor_library) as a back-end to structure the ELF data.
+- The Unix `file` utility can display some information about ELF files, including the instruction set architecture for which the code in a relocatable, executable, or shared object file is intended, or on which an ELF core dump was produced.
 
 
 
@@ -82,7 +90,7 @@ typedef struct {
         Elf64_Half      e_phnum; // 程序头个数
         Elf64_Half      e_shentsize; //节头实体size，节头表中所有实体均有相同size
         Elf64_Half      e_shnum; //节头个数
-        Elf64_Half      e_shstrndx; //
+        Elf64_Half      e_shstrndx; //节头字符串表节索引。即.shstrtab的索引
 } Elf64_Ehdr;
 ```
 
@@ -106,11 +114,13 @@ typedef struct {
 
 程序头描述的是段的信息。程序头表是程序头列表，跟在 ELF 头的后面。
 
-段提供执行层面的操作，与OS交互，其中可加载的段（loadable segments）加载到进程镜像。段告诉操作系统该段是否应该被加载到内存中，该段的可读可写属性等。节提供链接层面的信息，包含指令、符号表，重定向信息等，与链接器打交道。节告诉链接器的是跳转符号、指令原始内容等。
+段提供执行层面的操作，与OS交互，其中可加载的段（loadable segments）加载到进程镜像。段告诉操作系统该段是否应该被加载到内存中，该段的可读可写属性等。节提供链接层面的信息，包含指令、符号表，重定向信息等，与链接器打交道。节告诉链接器的是跳转符号、指令原始内容等。没有节头表，程序仍然可以正常运行，因为节头表没有对程序的内存布局进行描述，对程序内存布局的描述是在程序头表中。节头对于程序的运行来说不是必须的。
+
+也就是说，可重定位文件不存在程序头，因为.o 文件会被链接到可执行文件中，不会直接加载到内存中执行。此外，编译后的.o 文件链接后可能会增加新的节，比如.dynsym等，此类的节与动态链接和运行时重定位有关。关于节的详细介绍见下文第五章节。
 
 
 
-![Segment VS Section](/home/lab/Desktop/greagen.github.io/img/segment-vs-section.jpg)
+![Segment VS Section](../img/segment-vs-section.jpg)
 
 
 
@@ -133,7 +143,7 @@ typedef struct {
 
 
 
-常见的程序头类型有五种：PT_LOAD, PT_DYNAMIC, PT_NOTE, PT_INTERP, PT_PHDR。
+程序头类型有十余种，详细说明见官方文档。常见的程序头类型有五种：PT_LOAD, PT_DYNAMIC, PT_NOTE, PT_INTERP, PT_PHDR。
 
 样例如下：
 
@@ -186,7 +196,228 @@ Program Headers:
 
 #### 4.1 PT_LOAD
 
-一个可执行文件至少包含一个 PT_LOAD 类型的段。这类段是可装载的段，将会被装载或映射到内存中。一个需要动态链接的
+一个可执行文件至少包含一个 PT_LOAD 类型的段。这类段是可装载的段，将会被装载或映射到内存中。例如，存放程序代码的text段和存放全局变量的动态链接信息的data段会被映射到内存中，根据`p_align`中的值进行内存对齐。text 段（代码段）权限一般设置为`PF_X| PF_R`(读和可执行)，通常将data段的权限设置为`PF_W | PF_R)（读和写）。千面人病毒会修改被感染的程序的text段的权限。在程序头的段标记（p_flags）处增加PF_W标记来修改text段的权限。
+
+
+
+#### 4.2 PT_DYNAMIC-动态段的Phdr
+
+动态段是动态链接文件独有的段，包含了动态链接器所必需的一些信息。在动态段中包含了一些标记值和指针。包括但不限于以下内容：
+
+- 运行时需要链接的共享库列表
+- 全局偏移表的地址
+- 重定位条目的相关信息
+
+动态段包含`.dynamic`节，该段中有个独特的标志，`_DYNAMIC`，它包含的是以下结构的一个array[<sup>4</sup>](#refer_acthor)。
+
+```c
+typedef struct {
+	Elf64_Sxword	d_tag;
+   	union {
+   		Elf64_Xword	d_val;
+   		Elf64_Addr	d_ptr;
+	} d_un;
+} Elf64_Dyn;
+extern Elf64_Dyn	_DYNAMIC[];
+```
+
+
+
+####  4.3 PT_NOTE
+
+`PT_NOTE`类型的段可能保存了特定供应商或系统相关的信息。官方解释如下[<sup>3</sup>](#refer_acthor)：
+
+>Sometimes a vendor or system builder needs to mark an object file with special information that other programs will check for conformance, compatibility, etc. Sections of type `SHT_NOTE` and program header elements of type `PT_NOTE` can be used for this purpose. The note information in sections and program header elements holds a variable amount of entries. 
+
+事实上可执行程序运行时是不需要这个段的，这个段就成了很容易被病毒感染的一个地方。感兴趣的话可以自行搜索NOTE段病毒感染的相关信息。
+
+
+
+#### 4.4 PT_INTERP
+
+`PT_INTERP`段是对程序解释器位置的描述。
+
+
+
+#### 4.5 PT_PHDR
+
+该段保存了程序头表的位置和大小。没少好说的，官方解释如下：
+
+> The array element, if present, specifies the location and size of the program header table itself, both in the file and in the memory image of the program. This segment type may not occur more than once in a file. Moreover, it may occur only if the program header table is part of the memory image of the program. If it is present, it must precede any loadable segment entry. See [``Program Interpreter''](https://refspecs.linuxfoundation.org/elf/gabi4+/ch5.dynamic.html#interpreter) below for more information.
+
+
+
+#### 4.6 Text 段和 Data 段
+
+代码程序段和数据段实际上不是段的类型，只是按照段内容划分的重用概念。
+
+代码段包含的是可读可执行的指令和只读的数据，一般包含以下一些节:
+
+```shell
+.text
+.rodata
+.hash
+.dynsym
+.dynstr
+.plt
+.rel.got
+```
+
+数据段包含的是可读可写的数据和指令，通常包含一些一些节:
+
+```shell
+.data
+.dynamic
+.got
+.bss
+```
+
+如上所示，PT_DYNAMIC段也指向`.dynamic`节，而且实际上，`.plt`节不仅可以出现在text段，也可能属于数据段，这都依赖于处理器。更多信息可以查阅`Global Offset Table'`and `Procedure Linkage Table`
+
+
+
+
+
+### 5. Section header
+
+在每个段中，代码或者数据会被划分为不同的节。节头表是对所有节的位置和大小的描述，用于链接和调试。如果二进制文件中缺少节头，并不意味着节不存在，只是没有办法通过节头来引用节，对于调试器和反编译成程序来说只是可以参考的信息变少了。节头也可以被故意从节头表中删去来增加调试和逆向工程的难度。GNU的`binutils`工具，像`objdump`，`objcopy`还有`gdb`等都需要依赖节头定位到存储符号数据的节来获取符号信息。可以使用`readelf -S`查看节头信息：
+
+```shell
+$ readelf -S libpng16.so.16
+There are 28 section headers, starting at offset 0x3dcb0:
+
+Section Headers:
+  [Nr] Name              Type             Address           Offset
+       Size              EntSize          Flags  Link  Info  Align
+  [ 0]                   NULL             0000000000000000  00000000
+       0000000000000000  0000000000000000           0     0     0
+  [ 1] .note.gnu.build-i NOTE             0000000000000270  00000270
+       0000000000000024  0000000000000000   A       0     0     4
+  [ 2] .gnu.hash         GNU_HASH         0000000000000298  00000298
+       0000000000000800  0000000000000000   A       3     0     8
+  [ 3] .dynsym           DYNSYM           0000000000000a98  00000a98
+       0000000000001b60  0000000000000018   A       4     1     8
+  [ 4] .dynstr           STRTAB           00000000000025f8  000025f8
+       0000000000001564  0000000000000000   A       0     0     1
+  [ 5] .gnu.version      VERSYM           0000000000003b5c  00003b5c
+       0000000000000248  0000000000000002   A       3     0     2
+  [ 6] .gnu.version_d    VERDEF           0000000000003da8  00003da8
+       0000000000000038  0000000000000000   A       4     2     8
+  [ 7] .gnu.version_r    VERNEED          0000000000003de0  00003de0
+       00000000000000c0  0000000000000000   A       4     3     8
+  [ 8] .rela.dyn         RELA             0000000000003ea0  00003ea0
+       00000000000000d8  0000000000000018   A       3     0     8
+  [ 9] .rela.plt         RELA             0000000000003f78  00003f78
+       0000000000000d80  0000000000000018  AI       3    23     8
+  [10] .init             PROGBITS         0000000000005000  00005000
+       000000000000001b  0000000000000000  AX       0     0     4
+  [11] .plt              PROGBITS         0000000000005020  00005020
+       0000000000000910  0000000000000010  AX       0     0     16
+  [12] .plt.sec          PROGBITS         0000000000005930  00005930
+       0000000000000900  0000000000000010  AX       0     0     16
+  [13] .text             PROGBITS         0000000000006230  00006230
+       0000000000022555  0000000000000000  AX       0     0     16
+  [14] .fini             PROGBITS         0000000000028788  00028788
+       000000000000000d  0000000000000000  AX       0     0     4
+  [15] .rodata           PROGBITS         0000000000029000  00029000
+       00000000000044b8  0000000000000000   A       0     0     32
+  [16] .eh_frame_hdr     PROGBITS         000000000002d4b8  0002d4b8
+       0000000000000e94  0000000000000000   A       0     0     4
+  [17] .eh_frame         PROGBITS         000000000002e350  0002e350
+       00000000000051ec  0000000000000000   A       0     0     8
+  [18] .note.gnu.propert NOTE             0000000000033540  00033540
+       0000000000000020  0000000000000000   A       0     0     8
+  [19] .init_array       INIT_ARRAY       00000000000348f0  000338f0
+       0000000000000008  0000000000000008  WA       0     0     8
+  [20] .fini_array       FINI_ARRAY       00000000000348f8  000338f8
+       0000000000000008  0000000000000008  WA       0     0     8
+  [21] .data.rel.ro      PROGBITS         0000000000034900  00033900
+       0000000000000008  0000000000000000  WA       0     0     8
+  [22] .dynamic          DYNAMIC          0000000000034908  00033908
+       0000000000000230  0000000000000010  WA       4     0     8
+  [23] .got              PROGBITS         0000000000034b38  00033b38
+       00000000000004c8  0000000000000008  WA       0     0     8
+  [24] .bss              NOBITS           0000000000035000  00034000
+       0000000000000008  0000000000000000  WA       0     0     1
+  [25] .gnu.build.attrib NOTE             0000000000037008  00034000
+       0000000000009b58  0000000000000000           0     0     4
+  [26] .gnu_debuglink    PROGBITS         0000000000000000  0003db58
+       0000000000000034  0000000000000000           0     0     4
+  [27] .shstrtab         STRTAB           0000000000000000  0003db8c
+       0000000000000122  0000000000000000           0     0     1
+Key to Flags:
+  W (write), A (alloc), X (execute), M (merge), S (strings), l (large)
+  I (info), L (link order), G (group), T (TLS), E (exclude), x (unknown)
+  O (extra OS processing required) o (OS specific), p (processor specific)
+
+```
+
+
+
+#### 5.1 .text 节
+
+该节保存的是代码指令。因此节的类型为`SHT_PROGBITS`。该类型官方定义为[<sup>5</sup>](#refer_acthor):
+
+>`SHT_PROGBITS`The section holds information defined by the program, whose format and meaning are determined solely by the program.
+
+#### 5.2 .rodata 节
+
+.rodata 保存了只读的数据。例如代码中的字符串。
+
+```c
+printf("Hello world\n");
+```
+
+因为.rodata节是只读的，它存在于只读段中。因此，.rodata是在text段而不是data段。该节类型同样也是`
+SHT_PROGBITS`。
+
+#### 5.3 .plt 节
+
+该节保存的是动态链接器从共享库导入的函数所必须的相关代码。因为保存的是代码，同样也存在与text段中，且节类型为`SHT_PEOGBITS`。相关详细信息可查看过程链接表（Procedure Linkage Table，PLT）。
+
+#### 5.4 .data 节
+
+.data 节存在于data段，保存的是初始化的全局变量等数据，节类型也为`SHT_PROGBITS`。
+
+#### 5.5 .bss 节
+
+.bss节保存的是未经初始化的全局变量数据，也是data段的一部分。占用空间不超过4字节，仅表示这个节本身的空间。程序加载时数据被初始化为0，在程序执行期间可以进行赋值。由于该节没有保存实际的数据，因此节类型为`SHT_NOBITS`。
+
+#### 5.6 .got.plt节
+
+.got 节保存了全局偏移表。.got 节和.plt 节一起提供了对导入的共享库函数的访问入口，由动态链接器在运行时进行修改。该节与程序执行有关，因此节类型为`SHT_PROGBITS`。
+
+#### 5.7 .dynsym 节
+
+该节保存的是从共享库导入的动态符号信息，该节保存在text段中，节类型被标记为`SHT_DYNSYM`。
+
+#### 5.8 .dynstr 节
+
+该节保存的是动态符号字符串表，是三种字符串表之一。表中的字符串以空字符为终止符，代表了符号的名称。
+
+#### 5.9 .rel.* 节
+
+重定位节保存了重定位相关的信息，这些信息描述了如何在链接或者运行时对ELF目标文件的某部分内容或者进程镜像进行补充或者修改，节类型为`SHT_REL`。
+
+#### 5.10 .hash节
+
+.hash 节有时也成为.gnu.hash，保存了一个用于查找符号的哈希表。[Hash Table](https://refspecs.linuxfoundation.org/elf/gabi4+/ch5.dynamic.html#hash) 相关内容可查阅链接。
+
+#### 5.11 .symtab 节
+
+该节包含的是一个[Symbol Table](https://refspecs.linuxfoundation.org/elf/gabi4+/ch4.symtab.html)，保存了符号信息，节类型为`SHT_SYMTAB`。
+
+#### 5.12 .strtab 节
+
+该节包含了的是字符串，大多数是符号表的实体名，即符号字符串表，.symtab 节中的`st_name`条目引用的信息。该节类型为`SHT_STRTAB`。
+
+#### 5.13 .shstrtab 节
+
+该节保存的是节头字符串表，表中以空字符截止的字符串为各个节的节名。ELF文件头中的节头字符串表偏移索引变量e_shstrndx即为该节的索引。
+
+
+
+
 
 
 
@@ -212,3 +443,6 @@ Program Headers:
 
 [3] [Program Header](https://refspecs.linuxfoundation.org/elf/gabi4+/ch5.pheader.html)
 
+[4] [PT_DYNAMIC](https://refspecs.linuxfoundation.org/elf/gabi4+/ch5.dynamic.html#dynamic_section)
+
+[5] [Sections](https://refspecs.linuxfoundation.org/elf/gabi4+/ch4.sheader.html)
