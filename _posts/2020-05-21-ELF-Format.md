@@ -47,12 +47,12 @@ ELF文件可以被标记为以下几种类型：
 
 文件头是ELF文件的最开头部分，从文件的 0 偏移量开始。文件头信息是除了文件头之外的剩余部分文件的一个映射。该部分主要记录了ELF文件类型，程序头个数，节个数等等。通过`readelf -h`命令查看文件头信息，样例如下所示:
 
-```shell
+```
 $ readelf -h libpng16.so.16
 ELF Header:
   Magic:   7f 45 4c 46 02 01 01 00 00 00 00 00 00 00 00 00 
   Class:                             ELF64
-  Data:                              2\'s complement, little endian
+  Data:                              2's complement, little endian
   Version:                           1 (current)
   OS/ABI:                            UNIX - System V
   ABI Version:                       0
