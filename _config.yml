@@ -15,7 +15,7 @@ github_repo: "https://github.com/greagen/greagen.github.io.git" # you code repos
 # Sidebar settings
 sidebar: true                           # whether or not using Sidebar.
 sidebar-about-description: "to do!"
-sidebar-avatar: /img/about-me.jpeg      # use absolute URL, seeing it's used in both `/` and `/about/`
+sidebar-avatar: img/about-me.jpeg      # use absolute URL, seeing it's used in both `/` and `/about/`
 
 # SNS settings
 RSS: false
@@ -31,7 +31,7 @@ github_username:    greagen
 
 # Build settings
 # from 2016, 'pygments' is unsupported on GitHub Pages. Use 'rouge' for highlighting instead.
-permalink: pretty
+permalink: /_posts/:year-:month-:day-:title.html
 paginate: 10
 exclude: ["less","node_modules","Gruntfile.js","package.json","README.md"]
 anchorjs: true                          # if you want to customize anchor. check out line:181 of `post.html`
