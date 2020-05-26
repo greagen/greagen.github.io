@@ -7,7 +7,6 @@ author:     Greagen
 header-img: img/paper_read.jpg
 catalog: true
 tags:
-
     - ELF文件格式
 ---
 
@@ -26,8 +25,9 @@ tags:
 - `elfdump` is a command for viewing ELF information in an ELF file, available under Solaris and FreeBSD.
 - `objdump` provides a wide range of information about ELF files and other object formats. `objdump` uses the [Binary File Descriptor library](https://en.wikipedia.org/wiki/Binary_File_Descriptor_library) as a back-end to structure the ELF data.
 - The Unix `file` utility can display some information about ELF files, including the instruction set architecture for which the code in a relocatable, executable, or shared object file is intended, or on which an ELF core dump was produced.
+- ftrace，ltrace，strace 跟踪二进制文件中的符号调用、函数调用等。
 
-
+本文主要内容基于《Linux二进制分析》一书。
 
 ## 二、基本概念
 
@@ -35,7 +35,7 @@ tags:
 
 ELF文件可以被标记为以下几种类型：
 
-- ET_NONE: 位置类型。该标记的文件类型不确定或者还未定义。
+- ET_NONE: 未知类型。该标记的文件类型不确定或者还未定义。
 - ET_REL:　重定位文件（目标文件, xxx.o ）。可重定位文件是还未链接到可执行文件的独立代码，即编译后的 .o 文件。
 - ET_EXEC: 可执行文件。这类文件也成为程序，是一个进程开始的入口。
 - ET_DYN:　共享目标文件，即动态链接文件，.so 文件。在程序运行时被装载并链接到程序的进程镜像中。
@@ -389,11 +389,21 @@ SHT_PROGBITS`。
 
 #### 5.7 .dynsym 节
 
-该节保存的是从共享库导入的动态符号信息，该节保存在text段中，节类型被标记为`SHT_DYNSYM`。
+该节保存的是动态链接相关的导入导出符号，该节保存在text段中，节类型被标记为`SHT_DYNSYM`。
 
 #### 5.8 .dynstr 节
 
-该节保存的是动态符号字符串表，是三种字符串表之一。表中的字符串以空字符为终止符，代表了符号的名称。
+该节保存的是动态符号字符串表，是三种字符串表之一。表中的字符串以空字符为终止符，代表了符号的名称。 
+
+三种字符串表
+
+```c
+1. .dynstr
+2. .shstrtab
+3. .strtab
+```
+
+
 
 #### 5.9 .rel.* 节
 
@@ -417,21 +427,63 @@ SHT_PROGBITS`。
 
 
 
+### 6. symbol - ELF符号
+
+符号是对某种类型的变量和代码（例如全局变量和函数）的符号引用。例如，printf() 函数会在动态符号表.dynsym 中有一个指向该函数的符号条目。在大多数共享库和动态链接可执行文件中，存在两个符号表:.dynsym 和 .symtab。
+
+.dynsym 保存了来自外部文件符号的全局符号。例如printf() 此类的库函数。.dynsym保存的符号是.symtab所保存的符号的子集。后者还保存了可执行文件本地的全局符号，例如全局变量或者是本地函数。因此.symtab保存了所有的符号，而.dynsym只保存了动态/全局符号。
+
+.dynsym被标记为ALLOC（A），而.symtab没有标记。有A标记意味着运行时分配并装入内存。而.symtab 不是运行是必需的，因此不会被装载到内存中。.dynsym 保存的符号是运行时动态链接器所需要的唯一符号，是必需的。而.symtab符号表只是用来进行调试和链接，因此有时为了节省空间，会将.symtab 符号表从生产二进制文件中删除。
+
+符号的源码定义中，st_name 变量指向符号表中字符串表（.dynstr 或者 .strtab）的字符串偏移。偏移位置保存的是符号的名称字符串，例如 printf。
+
+#### 6.1 st_info
+
+st_info 定义了符号的类型和绑定属性。
+
+##### 6.1.1 符号类型
+
+- STT_NOTYPE: 符号类型未定义
+- STT_FUNC: 该符号与函数或者其他可执行代码关联
+- STT_OBJECT: 该符号与数据目标文件关联
+
+##### 6.1.2 符号绑定
+
+- STB_LOCAL: 本地符号在目标文件之外是不可见的。目标文件包含了符号的定义，例如声明一个为static的函数
+- STB_GLOBAL: 全局符号对于所有要合并的目标文件来说都是可见的。一个全局符号在一个文件中进行定义后，另一个文件可以对这个符号进行引用。类比源码不同 .c 文件编译为 .o 文件，各个文件之间可能存在函数调用关系，不同的 .o 目标文件链接打包在一起。
+- STB_WEAK: 与全局绑定类似。不过比 STB_GLOBAL 的优先级低。被标记为 STB_WEAK 的符号有可能被同名的未被标记为 STB_WEAK 的符号覆盖。类似源码中的符号名作用域和优先级。
+
+符号类型和符号绑定通过函数进行打包转换成 st_info 的值。
+
+符号的存在可以大大方便调试、反编译等工作。但是符号也可以被去掉。
+
+一个二进制文件的符号表 .symtab 可以很容易地被去掉，但是动态链接可执行文件会保留.dynsym，因此文件中会显示导入库的符号。如果一个文件通过静态编译，或者没有使用libc进行链接，然后使用strip命令清理。这个文件就不会有符号表，此时动态符号表也不存在，因为不是必需的。符号删除后，函数名会被替换成sub_xxxx的形式，增加辨识难度。
+
+  
+
+### 7. 重定位
+
+重定位的作用是将符号定义和符号引用进行链接。可重定位文件（.o文件）包含了如何修改节内容的相关信息，进而使链接过程中能够获取所需信息。例如obj1.o中调用了函数foo()，obj2.o中定义了foo()函数，链接器将二者进行分析，获取重定位信息，然后将两个文件链接到一个可执行文件。符号的引用（obj1.o）或被解析成符号的定义（obj2.o）。
+
+重定位前符号引用位置的地址为隐式加数（32位系统为: -sizeof(uint32_t)），根据重定位类型（例如，R_386_PC32）,采用相应的新地址计算方式（S +  A - P）获得新的偏移量，新的偏移量指向函数定义，然后使用新的偏移量替换原来符号引用处的值。
 
 
 
+### 8. 动态链接
 
-三种字符串表（待查是否需要研究以使用）
+可执行文件如果调用了其他动态链接文件中的函数，动态链接器会修改可执行文件中的**GOT**(Global Offset Table，全局偏移表)。**GOT**位于数据段（.got.plt 节）中，因为**GOT**需要是可写的。链接前，**GOT**中保存的跳转地址为**PLT**（.plt，过程链接表，保存相关代码，在text段）中相应条目的地址，动态链接器解析动态库中的函数地址后，根据**PLT**中的条目信息，首先跳转到相应的**GOT**条目，将该条目中原来指向**PLT**中相应调目的跳转地址改为解析的共享库函数地址。
 
-```c
-1. .dynstr
-2. .shstrtab
-3. .strtab
-```
+#### 8.1 动态段
 
+动态段有一个节头，可以通过节头来引用动态段，此外还可以通过程序头来引用动态段。动态链接器需要在运行时引用动态段，但是节头不能被加载到内存中，所以动态段需要有相关的程序头。动态段保存了`ElfN_Dyn`结构体组成的数组。其中`d_tag`字段保存了类型的定义参数。以下为一些比较重要的类型值：
 
+- **DT_NEEDED**: 保存了该文件所需的共享库名的字符串表偏移量。
+- **DT_SYMTAB**: 动态符号表的地址，对应的节名为 .dynsym
+- **DT_HASH**: 符号散列表的地址，对应的节为 .hash (有时命名为 .gnu.hash)
+- **DT_STRTAB**: 符号字符串表的地址，对应节名为 .dynstr
+- **DT_PLTGOT**: 全局偏移表的地址
 
-
+当动态库被加载到内存中时，链接器会获取库的动态段，并将符号表添加到符号表链（创建link_map条目并载入链表）中，符号表链存储了所有映射到内存的共享库的符号表。链接器构建完依赖列表后，挨个处理每个库的GOT，更新偏移地址。
 
 
 
