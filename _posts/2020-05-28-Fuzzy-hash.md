@@ -1,4 +1,16 @@
-# Fuzzy hash in software detection
+---
+layout:     post
+title:      Fuzzy hash in software detection
+subtitle:   
+date:       2020-05-28
+author:     Greagen
+header-img: img/paper_read.jpg
+catalog: true
+tags:
+    - fuzzy hash
+    - bianry search
+---
+# Fuzzy hash in binary search
 
 **Experimental Study of Fuzzy Hashing in Malware Clustering Analysi**
 
