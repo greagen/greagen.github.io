@@ -2,7 +2,7 @@
 layout:     post
 title:      Binary analysis tools
 subtitle:   Disassembly framwork, reverse engineering framwork
-date:       2020-06-12
+date:       2020-06-15
 author:     Greagen
 header-img: img/paper_read.jpg
 catalog: true
