@@ -355,15 +355,13 @@ http://ghidra.re/ghidra_docs/api/
 
 
 
-GUI模式下，默认import了ghidra.program.model.listing 模块
-
-有currentProgram 代表加载的object
+GUI模式下，有currentProgram 代表加载的object
 
 api可以查看Program：
 
 获取函数
 
-currentProgram.getFunctionManager.getrFunctions()
+currentProgram.getFunctionManager().getrFunctions(True)
 
 获取所有指令
 
@@ -372,6 +370,40 @@ listing = currentProgram.getListing()
 ins = listing.getInstructions(True)
 
 此时获取的是文件中所有指令，包含.init, .plt, .text等
+
+```python
+# 获取函数的指令
+>>> for i in insstr[:3]:
+...     i
+... 
+MOV RAX,qword ptr [0x00330fd8]
+TEST RAX,RAX
+JZ 0x0010425a
+>>> fs = currentProgram.getFunctionManager().getFunctions(True)
+>>> for i in fs:
+...     break
+... 
+>>> i
+_DT_INIT
+>>> i.getBody()
+[[00104248, 0010425e] ]
+>>> type(i.getBody())
+<type 'ghidra.program.model.address.AddressSet'>
+>>> i.getEntryPoint()
+00104248
+>>> for i in listing.getInstructions(i.getBody(), True):
+...     i
+... 
+SUB RSP,0x8
+MOV RAX,qword ptr [0x00330fd8]
+TEST RAX,RAX
+JZ 0x0010425a
+CALL RAX
+ADD RSP,0x8
+RET
+```
+
+
 
 
 
