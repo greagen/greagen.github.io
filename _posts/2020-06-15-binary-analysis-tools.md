@@ -8,8 +8,8 @@ header-img: img/paper_read.jpg
 catalog: true
 tags:
     - disassembler
-	- reverse engineering framework
-	- binary analysis tools
+    - reverse engineering framework
+    - binary analysis tools
 ---
 
 # Comparison
