@@ -347,21 +347,46 @@ chmod +x gidraRun
 
 
 
-## Scripting
+### Scripting
 
 https://duraki.github.io/posts/o/20200227-ghidra-scripting-image2icon.html
 
 http://ghidra.re/ghidra_docs/api/
 
+https://deadc0de.re/articles/ghidra-scripting-python.html
 
 
-GUI模式下，有currentProgram 代表加载的object
+
+脚本模式：
+
+- Java，Ghidra是由Java语言写的，因此Java兼容性较好。
+- Python， Ghidra 通过Jython实现运行Python脚本。Python 脚本api和Java都是一样的。
+
+脚本运行模式：
+
+- Headless 模式，通过命令行运行脚本
+
+  - 详情见 /Ghidra/support/analyzeHeadlessREADME.html
+
+- Single Jar model，把Ghidra编译成单独的Jar包，作为Java程序的library调用
+
+  - https://github.com/nshalabi/Coding-Ghidra
+
+  
+
+
+
+### 常用API
+
+文件导入分析后，变量currentProgram代表加载的object
 
 api可以查看Program：
 
 获取函数
 
 currentProgram.getFunctionManager().getrFunctions(True)
+
+也可以通过listing.getFunctions(True)获取函数。
 
 获取所有指令
 
@@ -373,6 +398,7 @@ ins = listing.getInstructions(True)
 
 ```python
 # 获取函数的指令
+# 实验文件libpng 1.6.34
 >>> for i in insstr[:3]:
 ...     i
 ... 
@@ -401,21 +427,88 @@ JZ 0x0010425a
 CALL RAX
 ADD RSP,0x8
 RET
+>>> i.getMnemonicString()
+# 打印操作符，例如MOV （第二句指令）
+>>> i.getOpObjects(0)
+# 打印第一个操作对象，例如 RAX（第二句指令）
+```
+
+
+
+### 指令操作数是否为跳转引用、偏移量等
+
+```python
+SUB RSP,0x8
+MOV RAX,qword ptr [0x00330fd8]
+TEST RAX,RAX
+JZ 0x0010425a
+call    rax ; __gmon_start__
+```
+
+上表为 libpng34 的_init 函数前五行指令。
+
+以上指令中发生引用操作的操作对象使用ins.getOperandReferences(op_index)可以显示属性
+
+```python
+>>>i0
+SUB RSP,0x8
+>>> i0.getOpObjects(0)
+array(java.lang.Object, [RSP])
+>>> i0.getOpObjects(1)
+array(java.lang.Object, [0x8])
+>>> i0.getOperandReferences(0)
+array(ghidra.program.model.symbol.Reference)
+>>> i0.getOperandReferences(1)
+array(ghidra.program.model.symbol.Reference)
+# 说明 RSP 和 0x8 值不产生位置引用
+
+>>> i
+MOV RAX,qword ptr [0x00330fd8]
+>>> i.getOpObjects(0)
+array(java.lang.Object, [RAX])
+>>> i.getOperandReferences(0)
+array(ghidra.program.model.symbol.Reference, [From: 0010424c To: 003320d0 Type: DATA Op: 0 ANALYSIS])
+>>> i.getOperandReferences(1)
+array(ghidra.program.model.symbol.Reference, [From: 0010424c To: 00330fd8 Type: READ Op: 1 DEFAULT])
+# 该指令两处都产生了引用
+
+>>> ii
+TEST RAX,RAX
+>>> ii.getOpObjects(0)
+array(java.lang.Object, [RAX])
+>>> ii.getOperandReferences(0)
+array(ghidra.program.model.symbol.Reference)
+
+>>> iii
+JZ 0x0010425a
+>>> iii.getOpObjects(0)
+array(java.lang.Object, [0010425a])
+>>> iii.getOperandReferences(0)
+array(ghidra.program.model.symbol.Reference, [From: 00104256 To: 0010425a Type: CONDITIONAL_JUMP Op: 0 DEFAULT])
+# jz 指令后面的操作数发生引用
+
+>>> iiii
+CALL RAX
+>>> iiii.getOpObjects(0)
+array(java.lang.Object, [RAX])
+>>> iiii.getOperandReferences(0)
+array(ghidra.program.model.symbol.Reference, [From: 00104258 To: 003320d0 Type: COMPUTED_CALL Op: 0 ANALYSIS])
+# call 后的操作数 RAX发生引用
 ```
 
 
 
 
 
+### Singlr Jar Model
+
+https://github.com/nshalabi/Coding-Ghidra
+
 
 
 ### Issues
 
-ghidra 似乎需要依赖于java。其python bindings 怎么运行还需进一步研究
-
 https://pypi.org/project/ghidrapy/
-
-https://deadc0de.re/articles/ghidra-scripting-python.html
 
 https://ghidra-sre.org/InstallationGuide.html#RunServer
 
