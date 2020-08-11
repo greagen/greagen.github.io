@@ -5,7 +5,7 @@ header-img: img/head-pic.jpg
 email: donxiaoyao@gmail.com
 description: "to do."
 keyword: "to do"
-url: "http://greagen.github.io"          # your host, for absolute URL
+url: "https://greagen.github.io"          # your host, for absolute URL
 baseurl: ""      # for example, '/blog' if your blog hosted on 'host/blog'
 github_repo: "https://github.com/greagen/greagen.github.io.git" # you code repository
 # timezone: Asia/Shanghai
