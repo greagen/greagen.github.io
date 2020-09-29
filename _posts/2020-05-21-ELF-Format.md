@@ -389,6 +389,8 @@ SHT_PROGBITS`。
 
 该节保存的是动态链接相关的导入导出符号，该节保存在text段中，节类型被标记为`SHT_DYNSYM`。
 
+> Runtime/Dynamic symbol table. For dynamic binaries, this section is the symbol table of globally visible symbols. For example, if a dynamic link library wants to export its symbols, these symbols will be stored here. On the other hand, if a dynamic executable binary uses symbols from a dynamic link library, then these symbols are stored here too.The symbol names (as NULL-terminated strings) are stored in `.dynstr` section.---https://stevens.netmeister.org/631/elf.html
+
 #### 5.8 .dynstr 节
 
 该节保存的是动态符号字符串表，是三种字符串表之一。表中的字符串以空字符为终止符，代表了符号的名称。 
